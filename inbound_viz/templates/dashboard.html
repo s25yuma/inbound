@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>インバウンド消費動向ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1f2933; --sub:#6b7785; --line:#e1e5ea; --accent:#2f6fed; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:"Hiragino Sans","Yu Gothic","Meiryo",sans-serif; font-size:14px; }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:12px 20px;
+           position:sticky; top:0; z-index:10; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  label { color:var(--sub); font-size:12px; display:flex; flex-direction:column; gap:2px; }
+  select { padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; font:inherit; min-width:120px; }
+  .tabs { margin-left:auto; display:flex; gap:6px; }
+  .tab { padding:6px 14px; border:1px solid var(--line); border-radius:999px; background:#fff; cursor:pointer; font:inherit; }
+  .tab.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  main { max-width:1280px; margin:0 auto; padding:16px 20px 40px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:6px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
+  .kpi .l { color:var(--sub); font-size:12px; } .kpi .v { font-size:24px; font-weight:600; }
+  .kpi .u { font-size:12px; color:var(--sub); margin-left:3px; }
+  h2 { font-size:15px; margin:22px 0 8px; padding-left:8px; border-left:4px solid var(--accent); }
+  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .card.wide { grid-column:1 / -1; }
+  .card h3 { font-size:13px; margin:0 0 2px; } .note { color:var(--sub); font-size:11px; margin-bottom:6px; min-height:14px; }
+  .box { position:relative; }
+  .empty { padding:40px; text-align:center; color:var(--sub); }
+  table { border-collapse:collapse; font-size:12px; width:100%; margin-top:10px; }
+  th,td { border-bottom:1px solid var(--line); padding:4px 8px; text-align:right; white-space:nowrap; }
+  th:first-child,td:first-child { text-align:left; } .tw { overflow-x:auto; }
+  .card.zoom { cursor:zoom-in; transition:box-shadow .15s; } .card.zoom:hover { box-shadow:0 2px 10px rgba(0,0,0,.12); }
+  .hint { color:var(--sub); font-size:12px; margin:8px 0 0; }
+  .modal { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal.on { display:flex; }
+  .mbox { background:#fff; border-radius:12px; padding:16px 20px 20px; width:min(1100px,100%); max-height:100%; overflow:auto; position:relative; }
+  .mbox h3 { font-size:16px; margin:0 28px 2px 0; }
+  .mclose { position:absolute; top:10px; right:12px; border:0; background:none; font-size:26px; line-height:1; cursor:pointer; color:var(--sub); }
+  @media (max-width:800px){ .grid{grid-template-columns:1fr;} .tabs{margin-left:0;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>インバウンド消費動向ダッシュボード（山形県・B1地域調査）</h1>
+  <div class="bar">
+    <label>調査期<select id="f_quarter"></select></label>
+    <label>国籍・地域<select id="f_country"></select></label>
+    <label>性別<select id="f_sex"></select></label>
+    <label>年代<select id="f_age"></select></label>
+    <div class="tabs">
+      <button class="tab on" data-t="dash">ダッシュボード</button>
+      <button class="tab" data-t="explore">自由集計</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section id="dash"></section>
+  <section id="explore" hidden>
+    <div class="bar" style="margin-bottom:12px">
+      <label>横軸（項目）<select id="x"></select></label>
+      <label>内訳（系列）<select id="group"></select></label>
+      <label>指標<select id="metric"></select></label>
+    </div>
+    <div class="card"><h3 id="e_title"></h3><div class="note" id="e_note"></div>
+      <div class="box" style="height:380px"><canvas id="e_canvas"></canvas></div>
+      <div class="tw"><table id="e_table"></table></div></div>
+  </section>
+</main>
+
+<div class="modal" id="modal"><div class="mbox">
+  <button class="mclose" id="mclose" aria-label="閉じる">×</button>
+  <h3 id="m_title"></h3><div class="note" id="m_note"></div>
+  <div class="box" id="m_box"><canvas id="m_canvas"></canvas></div>
+</div></div>
+
+<script>
+const META = {{ meta|tojson }};
+const $ = s => document.querySelector(s);
+const PAL = ['#2f6fed','#e8743b','#19a186','#9b59b6','#e5b422','#d9534f','#5bc0de','#7f8c8d','#8e6e53','#c2185b'];
+Chart.defaults.font.family = '"Hiragino Sans","Yu Gothic","Meiryo",sans-serif';
+const charts = {};
+let tab = 'dash';
+
+const fmt = (v, u) => v == null ? 'データ不足' : Number(v).toLocaleString('ja-JP', {maximumFractionDigits: 1}) + (u || '');
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+
+function fillSelect(id, items, blank) {
+  const s = $(id); s.innerHTML = '';
+  if (blank) {
+    const o = new Option(blank, '');
+    o.dataset.base = blank;
+    s.append(o);
+  }
+  items.forEach(i => {
+    const [val, label] = Array.isArray(i) ? i : [i, i];
+    const o = new Option(label, val);
+    o.dataset.base = label;
+    s.append(o);
+  });
+}
+
+function isConflictPair(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return (META.conflict_groups || []).some(grp => grp.includes(a) && grp.includes(b));
+}
+
+function syncExploreConstraints() {
+  const xSel = $('#x'), gSel = $('#group');
+  if (isConflictPair(xSel.value, gSel.value)) gSel.value = '';
+  for (const opt of gSel.options) {
+    if (!opt.value) continue;
+    const blocked = isConflictPair(xSel.value, opt.value);
+    opt.disabled = blocked;
+    opt.textContent = blocked ? `${opt.dataset.base}（重複のため選択不可）` : opt.dataset.base;
+  }
+  for (const opt of xSel.options) {
+    const blocked = isConflictPair(opt.value, gSel.value);
+    opt.disabled = blocked;
+    opt.textContent = blocked ? `${opt.dataset.base}（重複のため選択不可）` : opt.dataset.base;
+  }
+}
+
+fillSelect('#f_quarter', META.quarters, 'すべて');
+fillSelect('#f_country', META.countries, 'すべて');
+fillSelect('#f_sex', META.sexes, 'すべて');
+fillSelect('#f_age', META.ages, 'すべて');
+fillSelect('#x', Object.entries(META.vars));
+fillSelect('#group', Object.entries(META.vars), '（なし）');
+fillSelect('#metric', Object.entries(META.metrics));
+$('#x').value = 'country'; $('#group').value = 'sex';
+syncExploreConstraints();
+
+function qs(extra = {}) {
+  const p = new URLSearchParams();
+  ['quarter', 'country', 'sex', 'age'].forEach(k => { const v = $('#f_' + k).value; if (v) p.set(k, v); });
+  Object.entries(extra).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return p.toString();
+}
+
+function draw(canvas, spec, big) {
+  if (charts[canvas.id]) charts[canvas.id].destroy();
+  const h = !!spec.horizontal, line = spec.type === 'line';
+  const datasets = spec.datasets.map((d, i) => ({
+    label: d.label, data: d.data, n: d.n,
+    backgroundColor: PAL[i % 10] + (line ? '' : 'cc'), borderColor: PAL[i % 10], tension: .25, spanGaps: true
+  }));
+  const cat = { stacked: !!spec.stacked, ticks: { autoSkip: false, maxRotation: h ? 0 : 45 } };
+  const val = { stacked: !!spec.stacked, beginAtZero: true, title: { display: !!spec.unit, text: spec.unit } };
+  charts[canvas.id] = new Chart(canvas, {
+    type: spec.type, data: { labels: spec.labels, datasets },
+    options: {
+      font: { size: big ? 14 : 12 }, indexAxis: h ? 'y' : 'x', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: datasets.length > 1, labels: { font: { size: big ? 14 : 12 } } },
+        tooltip: { callbacks: { label: c => {
+          const n = c.dataset.n ? c.dataset.n[c.dataIndex] : null;
+          return `${c.dataset.label}: ${fmt(c.parsed[h ? 'x' : 'y'], spec.unit)}` + (n != null ? `（n=${n}）` : '');
+        } } }
+      },
+      scales: h ? { y: cat, x: val } : { x: cat, y: val }
+    }
+  });
+}
+
+async function loadDash() {
+  const j = await (await fetch('/api/dashboard?' + qs())).json();
+  const root = $('#dash'); root.innerHTML = '';
+  if (!j.n) { root.append(el('div', '該当するデータがありません。フィルタを変更してください。', 'empty')); return; }
+  const k = el('div', null, 'kpis');
+  j.kpis.forEach(x => { const c = el('div', null, 'kpi'); c.append(el('div', x.label, 'l'));
+    const v = el('div', x.value, 'v'); v.append(el('span', x.unit, 'u')); c.append(v); k.append(c); });
+  root.append(k);
+  root.append(el('div', 'グラフをクリックすると拡大表示できます（Escまたは背景クリックで閉じる）', 'hint'));
+  let id = 0;
+  j.sections.forEach(sec => {
+    root.append(el('h2', sec.title));
+    const g = el('div', null, 'grid'); root.append(g);
+    sec.charts.forEach(spec => {
+      const card = el('div', null, 'card' + (spec.wide ? ' wide' : ''));
+      card.append(el('h3', spec.title), el('div', spec.note || '', 'note'));
+      const box = el('div', null, 'box');
+      box.style.height = (spec.horizontal ? Math.max(240, spec.labels.length * 26 + 90) : 300) + 'px';
+      const cv = document.createElement('canvas'); cv.id = 'c' + (id++); box.append(cv); card.append(box); g.append(card);
+      card.classList.add('zoom'); card.title = 'クリックで拡大';
+      card.addEventListener('click', () => openModal(spec));
+      draw(cv, spec);
+    });
+  });
+}
+
+async function loadExplore() {
+  syncExploreConstraints();
+  const spec = await (await fetch('/api/explore?' + qs({ x: $('#x').value, group: $('#group').value, metric: $('#metric').value }))).json();
+  $('#e_title').textContent = spec.title; $('#e_note').textContent = spec.note || '';
+  draw($('#e_canvas'), spec);
+  const t = $('#e_table'); t.innerHTML = '';
+  const head = el('tr'); head.append(el('th', ''));
+  spec.datasets.forEach(d => head.append(el('th', d.label))); t.append(head);
+  spec.labels.forEach((l, i) => { const r = el('tr'); r.append(el('td', l));
+    spec.datasets.forEach(d => r.append(el('td', fmt(d.data[i], spec.unit) + (d.n ? `（n=${d.n[i]}）` : '')))); t.append(r); });
+}
+
+function openModal(spec) {
+  $('#m_title').textContent = spec.title; $('#m_note').textContent = spec.note || '';
+  $('#m_box').style.height = (spec.horizontal ? Math.max(420, spec.labels.length * 36 + 110) : 520) + 'px';
+  $('#modal').classList.add('on');
+  draw($('#m_canvas'), spec, true);
+}
+function closeModal() { $('#modal').classList.remove('on'); if (charts['m_canvas']) { charts['m_canvas'].destroy(); delete charts['m_canvas']; } }
+$('#mclose').addEventListener('click', closeModal);
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function reload() { tab === 'dash' ? loadDash() : loadExplore(); }
+document.querySelectorAll('.bar select').forEach(s => s.addEventListener('change', reload));
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
+  tab = b.dataset.t;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
+  $('#dash').hidden = tab !== 'dash'; $('#explore').hidden = tab !== 'explore'; reload();
+}));
+reload();
+</script>
+</body>
+</html>
