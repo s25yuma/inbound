@@ -1,9 +1,8 @@
-# app.py  --  インバウンド消費動向（B1地域調査・個票）可視化アプリ
+# app.py  --  インバウンド消費動向（B1地域調査・個票）可視化アプリ（全有用変数対応版）
 import os
 import re
 from collections import Counter
 
-import numpy as np
 import pandas as pd
 from flask import Flask, abort, jsonify, render_template, request
 
@@ -18,13 +17,12 @@ app.json.ensure_ascii = False
 
 # =====================================================
 # マスタ（変数リストの選択肢ラベル）
-
-# =====================================================\
+# =====================================================
 LABELS = {
     "arrange":   {1: "団体ツアー", 2: "個人パッケージ", 3: "個別手配"},
     "jr":        {1: "JR PASS利用", 2: "利用なし"},
     "status":    {1: "短期滞在(90日以内)", 2: "医療滞在", 3: "長期滞在(91日以上)", 4: "デジタルノマド",
-                  5: "トランジット(外出あり)", 6: "トランジット(外出なし)", 7: "永住者・配偶者等", -98: "不明"},
+                  5: "トランジット(外出あり)", 6: "トランジット(外出なし)", 7: "永住者・配偶者等"},
     "companion": {1: "自分ひとり", 2: "夫婦・パートナー", 3: "家族・親族", 4: "職場の同僚", 5: "友人", 6: "その他"},
     "visits":    {1: "1回目", 2: "2回目", 3: "3回目", 4: "4回目", 5: "5回目", 6: "6～9回目", 7: "10～19回", 8: "20回以上"},
     "purpose":   {1: "観光・レジャー", 2: "親族・知人訪問", 3: "ハネムーン", 4: "学校関連", 5: "スポーツ", 6: "イベント",
@@ -34,11 +32,16 @@ LABELS = {
     "product":   {1: "菓子類", 2: "酒類", 3: "生鮮農産物", 4: "その他食料品・飲料", 5: "化粧品・香水", 6: "医薬品",
                   7: "健康グッズ・トイレタリー", 8: "衣類", 9: "靴・かばん・革製品", 10: "電気製品", 11: "時計・カメラ",
                   12: "宝石・貴金属", 13: "民芸品・伝統工芸品", 14: "本・雑誌", 15: "ソフトウェア", 16: "その他買物代", 17: "その他"},
+    "food":      {1: "寿司", 2: "ラーメン", 3: "そば・うどん", 4: "肉料理", 5: "魚料理", 6: "小麦粉料理",
+                  7: "その他日本料理", 8: "外国の料理", 9: "その他料理", 10: "菓子類", 11: "果物", 12: "酒",
+                  13: "その他食料品・飲料"},
+    "age8":      {1: "15～19歳", 2: "20～29歳", 3: "30～39歳", 4: "40～49歳", 5: "50～59歳", 6: "60～69歳",
+                  7: "70～79歳", 8: "80歳以上"},
 }
 AGE = {"15_19": "15～19歳", "20_29": "20～29歳", "30_39": "30～39歳", "40_49": "40～49歳",
        "50_59": "50～59歳", "60_69": "60～69歳", "70ov": "70歳以上"}
 
-MULTI = {  # 複数選択フラグ: (列接頭辞, ラベル)
+MULTI = {
     "transport": ("D1", ["航空", "新幹線", "鉄道・モノレール", "貸切バス", "長距離バス", "近郊バス", "タクシー・ハイヤー",
                          "レンタカー", "レンタサイクル", "船舶", "その他", "徒歩のみ"]),
     "shop":      ("D2", ["百貨店", "家電量販店", "ファッション専門店", "100円ショップ", "SA・道の駅", "観光地の土産店",
@@ -55,6 +58,10 @@ MULTI = {  # 複数選択フラグ: (列接頭辞, ラベル)
 SPEND_PARTS = [("宿泊費", "C4a_pref_6"), ("飲食費", "C4b_pref_6"), ("域内交通費", "C4域内交通_pref_6"),
                ("娯楽等サービス", "C4i_pref_6"), ("買物代", "C4j_pref_6"), ("その他", "C4k_pref_6")]
 SPEND_REF = ("域間交通費※総額に含まず", "C4域間交通_pref_6")
+TRANSPORT_SUB = [
+    ("域間：新幹線・鉄道", "C4c_pref_6"), ("域間：バス・タクシー", "C4d_pref_6"), ("域間：その他", "C4e_pref_6"),
+    ("域内：鉄道・地下鉄", "C4f_pref_6"), ("域内：バス・タクシー", "C4g_pref_6"), ("域内：その他", "C4h_pref_6"),
+]
 
 
 def quarter_label(code):
@@ -65,12 +72,31 @@ def quarter_label(code):
 
 def read_csv(name):
     path = os.path.join(DATA_DIR, name)
+    if not os.path.exists(path):
+        path = os.path.join(BASE_DIR, name)
     for enc in ("utf-8-sig", "cp932"):
         try:
-            return pd.read_csv(path, encoding=enc)
+            return pd.read_csv(path, encoding=enc, low_memory=False)
         except UnicodeDecodeError:
             continue
     raise ValueError(f"文字コードを判別できません: {name}")
+
+
+def _extract_co_prefs(row):
+    prefs = set()
+    for v in row:
+        if not isinstance(v, str) or v in ("非該当", "回答なし", ""):
+            continue
+        m = re.search(r"\[(.+?)\]", v)
+        if m:
+            p = m.group(1).strip()
+        elif v.startswith("その他"):
+            p = re.sub(r"^その他|（.*）$", "", v).strip()
+        else:
+            continue
+        if p and p != "山形県":
+            prefs.add(p)
+    return sorted(prefs)
 
 
 # =====================================================
@@ -85,37 +111,47 @@ def load_data():
     d = pd.DataFrame(index=raw.index)
     d["quarter"] = raw["調査回"].map(quarter_label)
     d["quarter_code"] = raw["調査回"]
+    d["exit_month"] = raw["FS2"].astype(str).str.strip()
     d["country"] = raw[ccol].map(country_m)
     sa = raw["性年代"].map(sexage_m)
     d["sex"] = sa.str[0].map({"m": "男性", "f": "女性"})
     d["age"] = sa.str[1:].map(AGE)
+    d["age8"] = raw["E2"].map(LABELS["age8"])
     d["sexage"] = d["sex"] + d["age"]
+
     for key, col in [("arrange", "B1"), ("jr", "B3"), ("status", "E3"), ("companion", "E5"),
-                     ("visits", "E6"), ("purpose", "E7"), ("stay_c", "滞在日数_c"), ("product", "F1_c")]:
-        d[key] = raw[col].map(LABELS[key])           # 未定義コード(-98等)は欠測扱い
+                     ("visits", "E6"), ("purpose", "E7"), ("stay_c", "滞在日数_c"),
+                     ("product", "F1_c"), ("food", "F2_c")]:
+        d[key] = raw[col].map(LABELS[key])
 
     # 数値: -99(非該当)/-98(不明) の扱い
-    parts = [c for _, c in SPEND_PARTS] + [SPEND_REF[1], "C4総額_pref_6"]
-    for c in parts:  # 支出回答者(欠測でない行)では -99 は「支出なし=0」
+    parts = [c for _, c in SPEND_PARTS] + [SPEND_REF[1], "C4総額_pref_6"] + [c for _, c in TRANSPORT_SUB]
+    for c in parts:
         d[c] = raw[c].where(raw[c].isna(), raw[c].clip(lower=0))
     d["spend_total"] = d["C4総額_pref_6"]
     d["nights_pref"] = raw["C3_pref_6"].where(raw["C3_pref_6"] >= 0)
+    d["nights_all"] = raw["泊数"].where(raw["泊数"] >= 0)
     d["stay_days"] = raw["滞在日数"].where(raw["滞在日数"] > 0)
     d["b2"] = raw["B2"].where(raw["B2"] > 0)
+    d["b3_amt"] = raw["B3_金額"].where(raw["B3_金額"] > 0)
     d["repeat"] = (raw["E6"] >= 2).astype(float)
 
     for _, (pre, labels) in MULTI.items():
         for i in range(1, len(labels) + 1):
             d[f"{pre}_{i}"] = raw[f"{pre}_{i}"].where(raw[f"{pre}_{i}"] >= 0)
 
-    # 山形県内の訪問スポット / 入国空港 / 自由記述
+    # 訪問スポット（山形県内）・併訪都道府県・訪問地点数・入出国空港・自由記述
     c1 = [f"C1_{i}" for i in range(1, 14)]
     d["spots"] = raw[c1].apply(lambda r: sorted({re.sub(r"\s*\[山形県\]$", "", v).strip() for v in r
                                                  if isinstance(v, str) and v.endswith("[山形県]") and not v.startswith("その他")}), axis=1)
-    d["entry"] = raw["C1_入国"].str.replace(r"\s*\[.*\]", "", regex=True)
-    for k in ("F1", "F2"):
+    d["co_prefs"] = raw[c1].apply(_extract_co_prefs, axis=1)
+    d["stop_count"] = raw[c1].apply(lambda r: sum(isinstance(v, str) and v not in ("非該当", "回答なし", "") for v in r), axis=1)
+    d["entry"] = raw["C1_入国"].str.replace(r"\s*\[.*\]", "", regex=True).str.strip()
+    d["exit"] = raw["C1_出国"].str.replace(r"\s*\[.*\]", "", regex=True).str.strip()
+
+    for k in ("F1", "F2", "F3"):
         s = raw[k].astype(str).str.strip()
-        d[k.lower() + "_text"] = s.where(~s.isin(["", "nan", "回答なし"]))
+        d[k.lower() + "_text"] = s.where(~s.isin(["", "nan", "回答なし", "非該当"]))
     return d
 
 
@@ -124,9 +160,11 @@ DATA = load_data()
 # 軸にできるカテゴリ変数: key -> (表示名, 並び順(None=件数順))
 CAT_VARS = {
     "quarter": ("調査期", [quarter_label(c) for c in range(FIRST_CODE, FIRST_CODE + 8)]),
+    "exit_month": ("出国年月（FS2）", None),
     "country": ("国籍・地域", None),
     "sex": ("性別", ["男性", "女性"]),
-    "age": ("年代", list(AGE.values())),
+    "age": ("年代（7区分）", list(AGE.values())),
+    "age8": ("年代（8区分・80歳以上分離）", list(LABELS["age8"].values())),
     "sexage": ("性年代", [s + a for s in ("男性", "女性") for a in AGE.values()]),
     "arrange": ("旅行手配方法", list(LABELS["arrange"].values())),
     "jr": ("JRパス", list(LABELS["jr"].values())),
@@ -135,14 +173,21 @@ CAT_VARS = {
     "visits": ("来訪回数", list(LABELS["visits"].values())),
     "purpose": ("来訪目的", list(LABELS["purpose"].values())),
     "stay_c": ("滞在日数区分", list(LABELS["stay_c"].values())),
-    "product": ("最も満足した購入商品", None),
+    "product": ("最も満足した購入商品（17区分）", None),
+    "food": ("最も満足した飲食（13区分）", None),
+    "entry": ("入国空港・港", None),
+    "exit": ("出国空港・港", None),
 }
 METRICS = {
-    "count": ("回答数", "人", None), "share": ("構成比", "%", None),
+    "count": ("回答数", "人", None),
+    "share": ("構成比", "%", None),
     "spend": ("平均支出（山形県内）", "円", "spend_total"),
     "nights": ("平均泊数（山形県内）", "泊", "nights_pref"),
+    "nights_all": ("平均泊数（日本全体）", "泊", "nights_all"),
     "stay": ("平均滞在日数（日本全体）", "日", "stay_days"),
+    "stop_count": ("平均訪問地点数（日本全体）", "地点", "stop_count"),
     "b2": ("平均パッケージ・航空券料金", "円", "b2"),
+    "b3_amt": ("平均JRパス購入料金（利用者）", "円", "b3_amt"),
 }
 
 
@@ -170,7 +215,6 @@ def order_of(d, key, limit=None):
 
 
 def chart(title, labels, series, unit="", kind="bar", horizontal=False, stacked=False, note="", wide=False):
-    """series: [(名前, 値リスト, nリスト|None)]"""
     return dict(title=title, type=kind, labels=labels, unit=unit, horizontal=horizontal, stacked=stacked,
                 note=note, wide=wide,
                 datasets=[dict(label=n, data=[num(v) for v in vals], n=ns) for n, vals, ns in series])
@@ -234,7 +278,9 @@ def api_dashboard():
         ("平均支出（山形県内）", f"{sp.mean():,.0f}" if len(sp) else "-", "円/人"),
         ("支出あり回答者の平均", f"{sp[sp > 0].mean():,.0f}" if (sp > 0).any() else "-", "円/人"),
         ("平均泊数（山形県内）", f"{d['nights_pref'].mean():.1f}" if d["nights_pref"].notna().any() else "-", "泊"),
+        ("平均泊数（日本全体）", f"{d['nights_all'].mean():.1f}" if d["nights_all"].notna().any() else "-", "泊"),
         ("平均滞在日数（日本）", f"{d['stay_days'].mean():.1f}" if d["stay_days"].notna().any() else "-", "日"),
+        ("平均訪問地点数", f"{d['stop_count'].mean():.1f}", "地点"),
         ("リピーター比率", f"{d['repeat'].mean() * 100:.0f}", "%"),
     ]
 
@@ -243,7 +289,8 @@ def api_dashboard():
             count_chart(d, "sexage", "性年代"),
             count_chart(d, "companion", "同行者"), count_chart(d, "visits", "来訪回数"),
             count_chart(d, "purpose", "来訪目的", top=8, horizontal=True),
-            count_chart(d, "arrange", "旅行手配方法")]
+            count_chart(d, "arrange", "旅行手配方法"),
+            count_chart(d, "jr", "JRパス利用有無")]
 
     # --- 支出
     sample = d[d["spend_total"].notna()]
@@ -255,6 +302,14 @@ def api_dashboard():
                    [("全回答者平均（0円含む）", allm, None), ("支出者のみの平均", payer, None)],
                    unit="円", horizontal=True,
                    note=f"支出回答者 n={len(sample)}。総額＝域間交通費を除く6費目の合計")]
+
+    tr_names = [p for p, _ in TRANSPORT_SUB]
+    tr_cols = [c for _, c in TRANSPORT_SUB]
+    spend.append(chart("交通費の手段別内訳（山形県内）", tr_names,
+                       [("全回答者平均", [sample[c].mean() for c in tr_cols], None),
+                        ("支出者のみの平均", [sample.loc[sample[c] > 0, c].mean() for c in tr_cols], None)],
+                       unit="円", horizontal=True, note="C4c～C4hの手段別内訳"))
+
     q = order_of(d, "quarter")
     vals, ns = mean_by(d, "quarter", "spend_total", q)
     spend.append(chart("調査期別 平均支出（山形県内）", q, [("平均支出", vals, ns)], unit="円", kind="line",
@@ -269,21 +324,27 @@ def api_dashboard():
     nl = ["日帰り"] + [f"{i}泊" for i in range(1, 7)] + ["7泊以上"]
     spend.append(chart("山形県内の泊数", nl, [("回答数", [int((nt == i).sum()) for i in range(8)], None)], unit="人"))
 
-    # --- 行動
-    behavior = [multi_chart(d, "transport", "日本滞在中の交通手段"), multi_chart(d, "shop", "買物場所"),
+    # --- 行動・ルート
+    behavior = [multi_chart(d, "transport", "日本滞在中の交通手段"),
+                multi_chart(d, "shop", "買物場所"),
                 rank_chart([s for lst in d["spots"] for s in lst], "山形県内の訪問スポット（上位15）", n,
                            note="C1訪問地のうち山形県内。「その他山形県」は除く"),
-                rank_chart(d["entry"].dropna(), "入国空港・港（上位10）", n, top=10)]
+                rank_chart([p for lst in d["co_prefs"] for p in lst], "山形県とあわせて訪問された都道府県（上位15）", n,
+                           note="C1_1～C1_13から他都道府県を抽出（併訪率）"),
+                rank_chart(d["entry"].dropna(), "入国空港・港（上位10）", n, top=10),
+                rank_chart(d["exit"].dropna(), "出国空港・港（上位10）", n, top=10)]
 
-    # --- 満足
-    sat = [count_chart(d, "product", "最も満足した購入商品", top=10, horizontal=True),
+    # --- 満足度・期待
+    sat = [count_chart(d, "product", "最も満足した購入商品（17区分）", top=12, horizontal=True),
+           count_chart(d, "food", "最も満足した飲食（13区分）", top=13, horizontal=True),
            multi_chart(d, "f1_reason", "購入商品に満足した理由"),
            multi_chart(d, "f2_reason", "飲食に満足した理由"),
+           rank_chart(d["f3_text"].dropna(), "訪日前に楽しみにしていた観光・行動（F3・上位）", n, note="自由回答の単純集計"),
            rank_chart(d["f2_text"].dropna(), "最も満足した飲食（自由記述・上位）", n, note="表記ゆれは未統合"),
            rank_chart(d["f1_text"].dropna(), "最も満足した購入商品（自由記述・上位）", n, note="表記ゆれは未統合")]
 
     sections = [dict(title="回答者属性", charts=attr), dict(title="消費額（山形県内）", charts=spend),
-                dict(title="行動・訪問地", charts=behavior), dict(title="満足度・購入／飲食", charts=sat)]
+                dict(title="行動・訪問地・ルート", charts=behavior), dict(title="満足度・購入／飲食・訪日前期待", charts=sat)]
     return jsonify(n=n, kpis=[dict(label=a, value=b, unit=c) for a, b, c in kpis], sections=sections)
 
 
@@ -312,5 +373,4 @@ def api_explore():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=True)
