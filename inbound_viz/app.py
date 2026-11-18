@@ -9,7 +9,7 @@ from flask import Flask, abort, jsonify, render_template, request
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 MAIN_CSV = "個票データ2024Q1_2025Q4_sel_col.csv"
-MIN_N = 5          # 平均値を表示する最小サンプル数（未満は「データ不足」）
+MIN_N = 1          # 平均値を表示する最小サンプル数（未満は「データ不足」）
 FIRST_CODE = 57    # 調査回57 = 2024年4-6月期
 
 app = Flask(__name__, template_folder="templates")
