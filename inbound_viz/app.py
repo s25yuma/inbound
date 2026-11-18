@@ -9,7 +9,7 @@ from flask import Flask, abort, jsonify, render_template, request
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 MAIN_CSV = "個票データ2024Q1_2025Q4_sel_col.csv"
-MIN_N = 1          # 平均値を表示する最小サンプル数（未満は「データ不足」）
+MIN_N = 1          # 平均値を表示する最小サンプル数（1件以上ですべて表示）
 FIRST_CODE = 57    # 調査回57 = 2024年4-6月期
 
 app = Flask(__name__, template_folder="templates")
@@ -363,7 +363,7 @@ def api_dashboard():
     q = order_of(d, "quarter")
     vals, ns = mean_by(d, "quarter", "spend_total", q)
     spend.append(chart("調査期別 平均支出（山形県内）", q, [("平均支出", vals, ns)], unit="円", kind="line",
-                       note=f"n<{MIN_N} は非表示"))
+                       note="n<5 の期も参考値として表示"))
     top_c = [c for c in order_of(d, "country") if (sample["country"] == c).sum() >= 15][:8]
     if top_c:
         series = [(p, [sample.loc[sample["country"] == c, col].mean() for c in top_c], None)
@@ -414,7 +414,7 @@ def api_explore():
             vals, ns = mean_by(sub, x, METRICS[m][2], labels)
         series.append((gl or METRICS[m][0], vals, ns))
     title = f"{CAT_VARS[x][0]}別 {METRICS[m][0]}" + (f"（{CAT_VARS[g][0]}別）" if g else "")
-    note = f"平均値はn<{MIN_N}を非表示。構成比は系列ごとに合計100%" if m != "count" else ""
+    note = "n<5 の項目も参考値として表示。構成比は系列ごとに合計100%" if m != "count" else ""
     return jsonify(chart(title, labels, series, unit=METRICS[m][1], note=note))
 
 
