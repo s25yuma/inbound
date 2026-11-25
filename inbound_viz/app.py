@@ -8,7 +8,7 @@ from flask import Flask, abort, jsonify, render_template, request
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-MAIN_CSV = "個票データ2024Q1_2025Q4_sel_col.csv"
+MAIN_CSV = "inbound_all2024Q1_2026Q1_cut_pref6_UTF8.csv"
 MIN_N = 1          # 平均値を表示する最小サンプル数（1件以上ですべて表示）
 FIRST_CODE = 57    # 調査回57 = 2024年4-6月期
 
@@ -154,16 +154,26 @@ def is_conflict_pair(x, g):
 # =====================================================
 def load_data():
     raw = read_csv(MAIN_CSV)
-    country_m = read_csv("国籍地域.csv").set_index("code")["country"]
-    sexage_m = read_csv("性年代.csv").set_index("code")["sexAge"]
-    ccol = [c for c in raw.columns if c.startswith("国籍")][0]
 
     d = pd.DataFrame(index=raw.index)
     d["quarter"] = raw["調査回"].map(quarter_label)
     d["quarter_code"] = raw["調査回"]
     d["exit_month"] = raw["FS2"].astype(str).str.strip()
-    d["country"] = raw[ccol].map(country_m)
-    sa = raw["性年代"].map(sexage_m)
+
+    # 新CSVに country / sexAge 列がある場合は直接利用、なければマスタCSVから変換
+    if "country" in raw.columns:
+        d["country"] = raw["country"].astype(str).str.strip()
+    else:
+        country_m = read_csv("国籍地域.csv").set_index("code")["country"]
+        ccol = [c for c in raw.columns if c.startswith("国籍")][0]
+        d["country"] = raw[ccol].map(country_m)
+
+    if "sexAge" in raw.columns:
+        sa = raw["sexAge"].astype(str).str.strip()
+    else:
+        sexage_m = read_csv("性年代.csv").set_index("code")["sexAge"]
+        sa = raw["性年代"].map(sexage_m)
+
     d["sex"] = sa.str[0].map({"m": "男性", "f": "女性"})
     d["age"] = sa.str[1:].map(AGE)
     d["age8"] = raw["E2"].map(LABELS["age8"])
@@ -207,9 +217,17 @@ def load_data():
 
 DATA = load_data()
 
+MIN_CODE = int(DATA["quarter_code"].min())
+MAX_CODE = int(DATA["quarter_code"].max())
+QUARTER_ORDER = [quarter_label(c) for c in range(MIN_CODE, MAX_CODE + 1)]
+
+# FS2（Apr-24 等）を時系列順に並べる
+_dt = pd.to_datetime(DATA["exit_month"].dropna().unique(), format="%b-%y", errors="coerce")
+EXIT_MONTH_ORDER = [s for _, s in sorted(zip(_dt, DATA["exit_month"].dropna().unique()), key=lambda t: (pd.isna(t[0]), t[0]))]
+
 CAT_VARS = {
-    "quarter": ("調査期", [quarter_label(c) for c in range(FIRST_CODE, FIRST_CODE + 8)]),
-    "exit_month": ("出国年月（FS2）", None),
+    "quarter": ("調査期", QUARTER_ORDER),
+    "exit_month": ("出国年月（FS2）", EXIT_MONTH_ORDER),
     "country": ("国籍・地域", None),
     "sex": ("性別", ["男性", "女性"]),
     "age": ("年代（7区分）", list(AGE.values())),
