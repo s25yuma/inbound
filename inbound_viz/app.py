@@ -1,4 +1,5 @@
 # app.py  --  インバウンド消費動向（B1地域調査・個票）可視化アプリ
+import gc
 import os
 import re
 from collections import Counter
@@ -263,13 +264,13 @@ def quarter_label(code):
     return f"{y}年{i * 3 + 1}-{i * 3 + 3}月期"
 
 
-def read_csv(name):
+def read_csv(name, usecols=None):
     path = os.path.join(DATA_DIR, name)
     if not os.path.exists(path):
         path = os.path.join(BASE_DIR, name)
     for enc in ("utf-8-sig", "cp932"):
         try:
-            return pd.read_csv(path, encoding=enc, low_memory=False)
+            return pd.read_csv(path, encoding=enc, usecols=usecols, low_memory=False)
         except UnicodeDecodeError:
             continue
     raise ValueError(f"文字コードを判別できません: {name}")
@@ -334,14 +335,27 @@ def is_conflict_pair(x, g):
 
 
 # =====================================================
-# 前処理
+# 前処理（メモリ節約版）
 # =====================================================
 def load_data():
-    raw = read_csv(MAIN_CSV)
+    needed = {
+        "調査回", "FS2", "E2", "B1", "B2", "B3", "B3_金額", "E3", "E5", "E6", "E7",
+        "滞在日数_c", "滞在日数", "泊数", "C3_pref_6", "C4総額_pref_6",
+        "C1_入国", "C1_出国", "F1", "F1_c", "F2", "F2_c", "F3",
+        "country", "sexAge", "国籍・地域", "性年代",
+    }
+    needed.update(c for _, c in SPEND_PARTS)
+    needed.add(SPEND_REF[1])
+    needed.update(c for _, c in TRANSPORT_SUB)
+    needed.update(f"C1_{i}" for i in range(1, 14))
+    for _, (pre, labels) in MULTI.items():
+        needed.update(f"{pre}_{i}" for i in range(1, len(labels) + 1))
+
+    raw = read_csv(MAIN_CSV, usecols=lambda c: c in needed or c.startswith("国籍"))
 
     d = pd.DataFrame(index=raw.index)
     d["quarter"] = raw["調査回"].map(quarter_label)
-    d["quarter_code"] = raw["調査回"]
+    d["quarter_code"] = raw["調査回"].astype("int16")
     d["exit_month"] = raw["FS2"].astype(str).str.strip()
 
     # 新CSVに country / sexAge 列がある場合は直接利用、なければマスタCSVから変換
@@ -382,20 +396,22 @@ def load_data():
         + [c for _, c in TRANSPORT_SUB]
     )
     for c in parts:
-        d[c] = raw[c].where(raw[c].isna(), raw[c].clip(lower=0))
+        d[c] = raw[c].where(raw[c].isna(), raw[c].clip(lower=0)).astype("float32")
     d["spend_total"] = d["C4総額_pref_6"]
-    d["nights_pref"] = raw["C3_pref_6"].where(raw["C3_pref_6"] >= 0)
+    d["nights_pref"] = raw["C3_pref_6"].where(raw["C3_pref_6"] >= 0).astype("float32")
     d["nights_pref_c"] = raw["C3_pref_6"].map(_fmt_nights_pref)
-    d["nights_all"] = raw["泊数"].where(raw["泊数"] >= 0)
+    d["nights_all"] = raw["泊数"].where(raw["泊数"] >= 0).astype("float32")
     d["nights_all_c"] = raw["泊数"].map(_fmt_nights_all)
-    d["stay_days"] = raw["滞在日数"].where(raw["滞在日数"] > 0)
-    d["b2"] = raw["B2"].where(raw["B2"] > 0)
-    d["b3_amt"] = raw["B3_金額"].where(raw["B3_金額"] > 0)
-    d["repeat"] = (raw["E6"] >= 2).astype(float)
+    d["stay_days"] = raw["滞在日数"].where(raw["滞在日数"] > 0).astype("float32")
+    d["b2"] = raw["B2"].where(raw["B2"] > 0).astype("float32")
+    d["b3_amt"] = raw["B3_金額"].where(raw["B3_金額"] > 0).astype("float32")
+    d["repeat"] = (raw["E6"] >= 2).astype("float32")
 
     for _, (pre, labels) in MULTI.items():
         for i in range(1, len(labels) + 1):
-            d[f"{pre}_{i}"] = raw[f"{pre}_{i}"].where(raw[f"{pre}_{i}"] >= 0)
+            d[f"{pre}_{i}"] = (
+                raw[f"{pre}_{i}"].where(raw[f"{pre}_{i}"] >= 0).astype("float32")
+            )
 
     c1 = [f"C1_{i}" for i in range(1, 14)]
     d["spots"] = raw[c1].apply(
@@ -411,11 +427,15 @@ def load_data():
         axis=1,
     )
     d["co_prefs"] = raw[c1].apply(_extract_co_prefs, axis=1)
-    d["stop_count"] = raw[c1].apply(
-        lambda r: sum(
-            isinstance(v, str) and v not in ("非該当", "回答なし", "") for v in r
-        ),
-        axis=1,
+    d["stop_count"] = (
+        raw[c1]
+        .apply(
+            lambda r: sum(
+                isinstance(v, str) and v not in ("非該当", "回答なし", "") for v in r
+            ),
+            axis=1,
+        )
+        .astype("int16")
     )
     d["entry"] = raw["C1_入国"].str.replace(r"\s*\[.*\]", "", regex=True).str.strip()
     d["exit"] = raw["C1_出国"].str.replace(r"\s*\[.*\]", "", regex=True).str.strip()
@@ -423,10 +443,14 @@ def load_data():
     for k in ("F1", "F2", "F3"):
         s = raw[k].astype(str).str.strip()
         d[k.lower() + "_text"] = s.where(~s.isin(["", "nan", "回答なし", "非該当"]))
+
+    del raw
+    gc.collect()
     return d
 
 
 DATA = load_data()
+gc.collect()
 
 MIN_CODE = int(DATA["quarter_code"].min())
 MAX_CODE = int(DATA["quarter_code"].max())
@@ -859,6 +883,8 @@ def api_explore():
 
 # ---------- テキストマイニング ----------
 TM = TextMining(DATA)
+gc.collect()
+
 # 比較軸にできる項目（CAT_VARS にあるものだけ）
 TM_AXES = [
     k
@@ -975,7 +1001,7 @@ def api_tm_trend():
             else "その語を挙げた人数。"
         )
         + (f"回答者が{min_n}人未満の区分は表示しません。" if metric == "rate" else "")
-        + ("　山形県内と判定した区切りのみ対象。" if pref else "")
+        + (" 山形県内と判定した区切りのみ対象。" if pref else "")
     )
     return jsonify(
         dict(
