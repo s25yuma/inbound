@@ -11,8 +11,8 @@
       --bg: #f5f6f8;
       --card: #fff;
       --ink: #1f2933;
-      --sub: #6b7785;
-      --line: #e1e5ea;
+      --sub: #52606d;
+      --line: #d9e2ec;
       --accent: #2f6fed;
       --minor: #e8743b;
     }
@@ -26,37 +26,39 @@
       background: var(--bg);
       color: var(--ink);
       font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
-      font-size: 14px;
+      font-size: 16px;
+      line-height: 1.6;
     }
 
     header {
       background: var(--card);
       border-bottom: 1px solid var(--line);
-      padding: 12px 20px;
+      padding: 12px 24px;
       position: sticky;
       top: 0;
       z-index: 10;
     }
 
     h1 {
-      font-size: 17px;
-      margin: 0 0 8px;
+      font-size: 19px;
+      margin: 0 0 10px;
     }
 
     .tabs {
       margin-left: auto;
       display: flex;
-      gap: 6px;
+      gap: 8px;
     }
 
     .tab {
-      padding: 6px 14px;
+      padding: 7px 16px;
       border: 1px solid var(--line);
       border-radius: 999px;
       background: #fff;
       color: inherit;
       text-decoration: none;
-      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
     }
 
     .tab.on {
@@ -70,9 +72,10 @@
       border: 1px solid #f0d27a;
       border-left: 5px solid #e5a400;
       border-radius: 10px;
-      padding: 10px 14px;
-      margin-bottom: 12px;
-      line-height: 1.7;
+      padding: 12px 18px;
+      margin-bottom: 14px;
+      font-size: 14px;
+      line-height: 1.75;
     }
 
     .warn b {
@@ -80,8 +83,8 @@
     }
 
     .warn ul {
-      margin: 4px 0 0;
-      padding-left: 20px;
+      margin: 6px 0 0;
+      padding-left: 22px;
     }
 
     .grid.single {
@@ -93,17 +96,18 @@
       border: 1px solid var(--line);
       border-radius: 999px;
       background: #fff;
-      padding: 3px;
-      margin-bottom: 12px;
+      padding: 4px;
+      margin-bottom: 14px;
     }
 
     .seg {
       border: 0;
       background: none;
-      padding: 7px 22px;
+      padding: 9px 26px;
       border-radius: 999px;
       cursor: pointer;
-      font: inherit;
+      font-family: inherit;
+      font-size: 15px;
       font-weight: 600;
       color: var(--sub);
     }
@@ -121,63 +125,77 @@
     .bar {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 12px 16px;
       align-items: flex-end;
     }
 
     label {
       color: var(--sub);
-      font-size: 12px;
+      font-size: 13px;
+      font-weight: 500;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
     }
 
     label.chk {
       flex-direction: row;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       padding-bottom: 6px;
+      font-size: 14px;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    input[type=checkbox] {
+      width: 17px;
+      height: 17px;
+      cursor: pointer;
     }
 
     select,
     input[type=text] {
-      padding: 5px 8px;
+      padding: 7px 11px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 7px;
       background: #fff;
-      font: inherit;
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--ink);
     }
 
     select {
-      min-width: 110px;
+      min-width: 130px;
     }
 
     main {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 14px 20px 40px;
+      width: 100%;
+      margin: 0;
+      padding: 16px 24px 48px;
     }
 
     .controls {
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 10px;
-      padding: 12px 14px;
-      margin-bottom: 12px;
+      padding: 14px 18px;
+      margin-bottom: 14px;
     }
 
     .summary {
       background: #eef3ff;
       border: 1px solid #cfdcff;
       border-radius: 10px;
-      padding: 10px 14px;
-      margin-bottom: 12px;
-      line-height: 1.7;
+      padding: 14px 18px;
+      margin-bottom: 14px;
+      font-size: 16px;
+      line-height: 1.8;
     }
 
     .summary b {
       color: var(--accent);
+      font-size: 18px;
     }
 
     .summary b.m {
@@ -187,37 +205,37 @@
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 16px;
     }
 
     .card {
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 10px;
-      padding: 12px 14px;
+      padding: 16px 20px;
       min-width: 0;
     }
 
     .card h2 {
-      font-size: 15px;
-      margin: 0 0 2px;
+      font-size: 18px;
+      margin: 0 0 4px;
     }
 
     .card.maj h2 {
-      border-left: 4px solid var(--accent);
-      padding-left: 8px;
+      border-left: 5px solid var(--accent);
+      padding-left: 10px;
     }
 
     .card.min h2 {
-      border-left: 4px solid var(--minor);
-      padding-left: 8px;
+      border-left: 5px solid var(--minor);
+      padding-left: 10px;
     }
 
     .note {
       color: var(--sub);
-      font-size: 12px;
-      margin: 2px 0 8px;
-      min-height: 16px;
+      font-size: 14px;
+      margin: 4px 0 12px;
+      min-height: 20px;
     }
 
     .box {
@@ -227,36 +245,40 @@
     .chips {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
-      max-height: 560px;
-      overflow: auto;
-      padding: 2px;
+      gap: 9px;
+      padding: 4px 0;
     }
 
     .chip {
       border: 1px solid #f3c9b5;
       background: #fff4ee;
       border-radius: 999px;
-      padding: 3px 10px;
-      font-size: 13px;
+      padding: 6px 14px;
+      font-size: 15px;
+      line-height: 1.4;
     }
 
     .chip i {
       color: var(--minor);
       font-style: normal;
-      font-size: 11px;
-      margin-left: 4px;
+      font-weight: 600;
+      font-size: 13px;
+      margin-left: 6px;
     }
 
     .empty {
       color: var(--sub);
-      padding: 30px;
+      padding: 36px;
+      font-size: 15px;
       text-align: center;
     }
 
     @media (max-width:900px) {
       .grid {
         grid-template-columns: 1fr;
+      }
+      .tabs {
+        margin-left: 0;
       }
     }
   </style>
@@ -274,7 +296,6 @@
         <a class="tab" href="/">ダッシュボード</a>
         <a class="tab" href="/#explore">自由集計</a>
         <a class="tab on" href="/opinions">少数派の意見</a>
-        <a class="tab" href="/textmining">テキストマイニング</a>
       </div>
     </div>
   </header>
@@ -298,7 +319,7 @@
 
     <div class="controls">
       <div class="bar">
-        <label>見たい意見<select id="topic" style="min-width:300px"></select></label>
+        <label>見たい意見<select id="topic" style="min-width:340px"></select></label>
         <label id="topWrap">多数派とする件数（上位）<select id="top">
             <option>5</option>
             <option selected>10</option>
@@ -345,6 +366,7 @@
     const el = (t, text, c) => { const e = document.createElement(t); if (text != null) e.textContent = text; if (c) e.className = c; return e; };
     const fmt = v => Number(v).toLocaleString('ja-JP', { maximumFractionDigits: 1 });
     Chart.defaults.font.family = '"Hiragino Sans","Yu Gothic","Meiryo",sans-serif';
+    Chart.defaults.font.size = 14;
 
     function fill(id, items, blank) {
       const s = $(id); s.innerHTML = '';
@@ -390,18 +412,27 @@
       // 多数派: 横棒グラフ
       if (chart) { chart.destroy(); chart = null; }
       if (!showMaj) return renderMinority(j);
-      $('#majBox').style.height = Math.max(260, j.majority.labels.length * 30 + 70) + 'px';
-      $('#majNote').textContent = `${j.title}　棒の長さ＝回答者に対する割合。ツールチップに人数を表示`;
+      $('#majBox').style.height = Math.max(360, j.majority.labels.length * 42 + 90) + 'px';
+      $('#majNote').textContent = `${j.title} 棒の長さ＝回答者に対する割合。ツールチップに人数を表示`;
       chart = new Chart($('#majCanvas'), {
         type: 'bar',
         data: { labels: j.majority.labels, datasets: [{ data: j.majority.shares, counts: j.majority.counts, backgroundColor: '#2f6fedcc' }] },
         options: {
           indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${fmt(c.parsed.x)}%（${c.dataset.counts[c.dataIndex]}${unit}）` } } },
-          scales: { y: { ticks: { autoSkip: false } }, x: { beginAtZero: true, title: { display: true, text: '%' } } }
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              titleFont: { size: 14 },
+              bodyFont: { size: 14 },
+              callbacks: { label: c => `${fmt(c.parsed.x)}%（${c.dataset.counts[c.dataIndex]}${unit}）` }
+            }
+          },
+          scales: {
+            y: { ticks: { autoSkip: false, font: { size: 14 } } },
+            x: { beginAtZero: true, ticks: { font: { size: 13 } }, title: { display: true, text: '%', font: { size: 14 } } }
+          }
         }
       });
-
     }
 
     function renderMinority(j) {
