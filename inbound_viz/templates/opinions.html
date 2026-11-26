@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>少数派の意見｜インバウンド消費動向ダッシュボード</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card: #fff;
+      --ink: #1f2933;
+      --sub: #6b7785;
+      --line: #e1e5ea;
+      --accent: #2f6fed;
+      --minor: #e8743b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+      font-size: 14px;
+    }
+
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      padding: 12px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    h1 {
+      font-size: 17px;
+      margin: 0 0 8px;
+    }
+
+    .tabs {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+    }
+
+    .tab {
+      padding: 6px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: inherit;
+      text-decoration: none;
+      font: inherit;
+    }
+
+    .tab.on {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .warn {
+      background: #fff8e1;
+      border: 1px solid #f0d27a;
+      border-left: 5px solid #e5a400;
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      line-height: 1.7;
+    }
+
+    .warn b {
+      color: #8a5a00;
+    }
+
+    .warn ul {
+      margin: 4px 0 0;
+      padding-left: 20px;
+    }
+
+    .grid.single {
+      grid-template-columns: 1fr;
+    }
+
+    .toggle {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 3px;
+      margin-bottom: 12px;
+    }
+
+    .seg {
+      border: 0;
+      background: none;
+      padding: 7px 22px;
+      border-radius: 999px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+      color: var(--sub);
+    }
+
+    .seg.on[data-v=maj] {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .seg.on[data-v=min] {
+      background: var(--minor);
+      color: #fff;
+    }
+
+    .bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    label {
+      color: var(--sub);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    label.chk {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      padding-bottom: 6px;
+    }
+
+    select,
+    input[type=text] {
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      font: inherit;
+    }
+
+    select {
+      min-width: 110px;
+    }
+
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 14px 20px 40px;
+    }
+
+    .controls {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+
+    .summary {
+      background: #eef3ff;
+      border: 1px solid #cfdcff;
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      line-height: 1.7;
+    }
+
+    .summary b {
+      color: var(--accent);
+    }
+
+    .summary b.m {
+      color: var(--minor);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      min-width: 0;
+    }
+
+    .card h2 {
+      font-size: 15px;
+      margin: 0 0 2px;
+    }
+
+    .card.maj h2 {
+      border-left: 4px solid var(--accent);
+      padding-left: 8px;
+    }
+
+    .card.min h2 {
+      border-left: 4px solid var(--minor);
+      padding-left: 8px;
+    }
+
+    .note {
+      color: var(--sub);
+      font-size: 12px;
+      margin: 2px 0 8px;
+      min-height: 16px;
+    }
+
+    .box {
+      position: relative;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 560px;
+      overflow: auto;
+      padding: 2px;
+    }
+
+    .chip {
+      border: 1px solid #f3c9b5;
+      background: #fff4ee;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 13px;
+    }
+
+    .chip i {
+      color: var(--minor);
+      font-style: normal;
+      font-size: 11px;
+      margin-left: 4px;
+    }
+
+    .empty {
+      color: var(--sub);
+      padding: 30px;
+      text-align: center;
+    }
+
+    @media (max-width:900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>インバウンド消費動向ダッシュボード（山形県・B1地域調査）</h1>
+    <div class="bar">
+      <label>調査期<select id="f_quarter"></select></label>
+      <label>国籍・地域<select id="f_country"></select></label>
+      <label>性別<select id="f_sex"></select></label>
+      <label>年代<select id="f_age"></select></label>
+      <div class="tabs">
+        <a class="tab" href="/">ダッシュボード</a>
+        <a class="tab" href="/#explore">自由集計</a>
+        <a class="tab on" href="/opinions">少数派の意見</a>
+        <a class="tab" href="/textmining">テキストマイニング</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="toggle" role="group" aria-label="表示切替">
+      <button type="button" class="seg" data-v="maj">多数派の意見</button>
+      <button type="button" class="seg on" data-v="min">少数派の意見</button>
+    </div>
+
+    <div class="warn" id="warn"><b>⚠ ご利用上の注意（少数派の意見について）</b>
+      <ul>
+        <li>ここに表示されるのは<b>回答数の少ない意見</b>です。<b>全体の傾向や多数の意見を表すものではありません</b>。</li>
+        <li>1人だけの意見は個人の感想であり、<b>統計的に一般化できません</b>。資料などで引用する際は「少数意見」と明記してください。</li>
+        <li>自由記述は表記ゆれ（例：蔵王／蔵王の樹氷）を完全には統合できていません。<b>同じ意味の意見が別々に表示される</b>ことがあります。</li>
+        <li>「括弧内の補足を無視して統合」「区切って別々に数える」の設定で、意見の種類や人数が変わります。</li>
+        <li>「山形に関連する意見だけ」はキーワードによる簡易判定です。「温泉」「樹氷」だけの記述は除かれ、宮城蔵王など他県の地名が含まれることもあります。</li>
+        <li>集計はウェイト未適用の単純集計です。フィルタで絞るほど回答者が少なくなり、結果が不安定になります。</li>
+      </ul>
+    </div>
+
+    <div class="controls">
+      <div class="bar">
+        <label>見たい意見<select id="topic" style="min-width:300px"></select></label>
+        <label id="topWrap">多数派とする件数（上位）<select id="top">
+            <option>5</option>
+            <option selected>10</option>
+            <option>15</option>
+            <option>20</option>
+            <option>30</option>
+          </select></label>
+        <label id="maxWrap">少数派の人数で絞り込み<select id="max_count">
+            <option value="0" selected>指定なし（多数派以外すべて）</option>
+            <option value="1">1人だけ</option>
+            <option value="2">2人以下</option>
+            <option value="3">3人以下</option>
+            <option value="5">5人以下</option>
+          </select></label>
+        <label id="qWrap">少数派を検索<input type="text" id="q" placeholder="例：温泉"></label>
+        <label class="chk" id="mergeWrap"><input type="checkbox" id="merge" checked>括弧内の補足を無視して統合（例：牛タン（仙台）→牛タン）</label>
+        <label class="chk" id="prefWrap"><input type="checkbox" id="pref"
+            checked>山形に関連する意見だけ表示（山形・蔵王・銀山・山寺などのキーワード判定）</label>
+        <label class="chk" id="splitWrap"><input type="checkbox" id="split"
+            checked>「、」「,」「/」で区切って別々の意見として数える（自由記述）</label>
+      </div>
+    </div>
+
+    <div class="summary" id="summary"></div>
+
+    <div class="grid single" id="grid">
+      <div class="card maj" id="majCard" hidden>
+        <h2>多数派の意見</h2>
+        <div class="note" id="majNote"></div>
+        <div class="box" id="majBox"><canvas id="majCanvas"></canvas></div>
+      </div>
+      <div class="card min" id="minCard">
+        <h2>少数派の意見</h2>
+        <div class="note" id="minNote"></div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const META = {{ meta| tojson }};
+    const $ = s => document.querySelector(s);
+    let chart = null, timer = null, view = 'min';   // 'min'=少数派 / 'maj'=多数派
+    const el = (t, text, c) => { const e = document.createElement(t); if (text != null) e.textContent = text; if (c) e.className = c; return e; };
+    const fmt = v => Number(v).toLocaleString('ja-JP', { maximumFractionDigits: 1 });
+    Chart.defaults.font.family = '"Hiragino Sans","Yu Gothic","Meiryo",sans-serif';
+
+    function fill(id, items, blank) {
+      const s = $(id); s.innerHTML = '';
+      if (blank) s.append(new Option(blank, ''));
+      items.forEach(i => s.append(Array.isArray(i) ? new Option(i[1], i[0]) : new Option(i, i)));
+    }
+    fill('#f_quarter', META.quarters, 'すべて'); fill('#f_country', META.countries, 'すべて');
+    fill('#f_sex', META.sexes, 'すべて'); fill('#f_age', META.ages, 'すべて');
+    fill('#topic', Object.entries(META.topics));
+
+    function qs() {
+      const p = new URLSearchParams();
+      ['quarter', 'country', 'sex', 'age'].forEach(k => { const v = $('#f_' + k).value; if (v) p.set(k, v); });
+      p.set('topic', $('#topic').value); p.set('top', $('#top').value); p.set('max_count', $('#max_count').value);
+      p.set('merge', $('#merge').checked ? '1' : '0'); p.set('split', $('#split').checked ? '1' : '0'); p.set('pref', $('#pref').checked ? '1' : '0');
+      const q = $('#q').value.trim(); if (q) p.set('q', q);
+      return p.toString();
+    }
+
+    const limText = j => j.max_count === 0 ? `上位${j.top}件以外のすべて` : `上位${j.top}件以外で${j.max_count}人${j.max_count === 1 ? 'だけ' : '以下'}`;
+
+    async function load() {
+      const showMaj = view === 'maj';
+      $('#minCard').hidden = showMaj; $('#warn').hidden = showMaj;
+      $('#maxWrap').style.display = $('#qWrap').style.display = showMaj ? 'none' : '';
+      $('#majCard').hidden = !showMaj; $('#grid').classList.toggle('single', !showMaj);
+      const j = await (await fetch('/api/opinions?' + qs())).json();
+      const lim = limText(j);
+      const kind = j.kind, unit = kind === 'multi' ? '人（複数回答）' : '人';
+      $('#mergeWrap').style.display = (kind === 'text' || kind === 'list') ? '' : 'none';
+      $('#splitWrap').style.display = $('#prefWrap').style.display = kind === 'text' ? '' : 'none';
+
+      const s = $('#summary'); s.innerHTML = '';
+      if (!j.base) { s.textContent = '該当する回答がありません。フィルタを変更してください。'; }
+      else {
+        const mk = (t, c) => el('b', t, c);
+        if (j.pref_only) s.append('【山形関連のキーワードを含む意見のみ】 ');
+        if (showMaj) s.append(`回答者 `, mk(fmt(j.base) + '人'), ` から、異なる意見が `, mk(j.kinds + '種類'), ` 集まりました。上位${j.top}件だけで、のべ回答の `, mk(j.majority.coverage + '%'), ` をカバーします。`);
+        else s.append(`回答者 `, mk(fmt(j.base) + '人'), ` から、異なる意見が `, mk(j.kinds + '種類'), ` 集まりました。そのうち少数派（${lim}）は `,
+          mk(j.minority.kinds + '種類（全種類の' + j.minority.kinds_share + '%）', 'm'), ` で、のべ回答の `, mk(j.minority.answers_share + '%', 'm'), ` を占めます。`);
+      }
+
+      // 多数派: 横棒グラフ
+      if (chart) { chart.destroy(); chart = null; }
+      if (!showMaj) return renderMinority(j);
+      $('#majBox').style.height = Math.max(260, j.majority.labels.length * 30 + 70) + 'px';
+      $('#majNote').textContent = `${j.title}　棒の長さ＝回答者に対する割合。ツールチップに人数を表示`;
+      chart = new Chart($('#majCanvas'), {
+        type: 'bar',
+        data: { labels: j.majority.labels, datasets: [{ data: j.majority.shares, counts: j.majority.counts, backgroundColor: '#2f6fedcc' }] },
+        options: {
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${fmt(c.parsed.x)}%（${c.dataset.counts[c.dataIndex]}${unit}）` } } },
+          scales: { y: { ticks: { autoSkip: false } }, x: { beginAtZero: true, title: { display: true, text: '%' } } }
+        }
+      });
+
+    }
+
+    function renderMinority(j) {
+      const lim = limText(j);
+      const m = j.minority, box = $('#chips'); box.innerHTML = '';
+      $('#minNote').textContent = `少数派（${lim}）を人数の多い順に一覧表示` +
+        (m.truncated ? `（${m.matched}件中、先頭${m.items.length}件）` : `（${m.matched}件）`);
+      if (!m.items.length) box.append(el('div', '該当する少数派の意見はありません。', 'empty'));
+      m.items.forEach(i => { const c = el('span', i.text, 'chip'); c.append(el('i', '×' + i.count)); box.append(c); });
+    }
+
+    const later = () => { clearTimeout(timer); timer = setTimeout(load, 250); };
+    document.querySelectorAll('select, input[type=checkbox]').forEach(e => e.addEventListener('change', load));
+    document.querySelectorAll('.seg').forEach(b => b.addEventListener('click', () => {
+      view = b.dataset.v;
+      document.querySelectorAll('.seg').forEach(x => x.classList.toggle('on', x === b));
+      load();
+    }));
+    $('#q').addEventListener('input', later);
+    load();
+  </script>
+</body>
+
+</html>

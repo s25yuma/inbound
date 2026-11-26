@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>テキストマイニング｜インバウンド消費動向ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1f2933; --sub:#6b7785; --line:#e1e5ea; --accent:#2f6fed; --warm:#e8743b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Hiragino Sans","Yu Gothic","Meiryo",sans-serif; font-size:14px; }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:12px 20px; position:sticky; top:0; z-index:10; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+  label { color:var(--sub); font-size:12px; display:flex; flex-direction:column; gap:2px; }
+  label.chk { flex-direction:row; align-items:center; gap:6px; padding-bottom:6px; }
+  select, input[type=text] { padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; font:inherit; }
+  select { min-width:110px; }
+  button.sm { padding:5px 12px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; font:inherit; }
+  .tabs { margin-left:auto; display:flex; gap:6px; align-self:center; }
+  .tab { padding:6px 14px; border:1px solid var(--line); border-radius:999px; background:#fff; color:inherit; text-decoration:none; font:inherit; }
+  .tab.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  main { max-width:none; padding:14px 24px 40px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; min-width:0; margin-bottom:12px; }
+  .card h2 { font-size:15px; margin:0 0 2px; padding-left:8px; border-left:4px solid var(--accent); }
+  .note { color:var(--sub); font-size:12px; margin:2px 0 8px; min-height:16px; }
+  .summary { background:#eef3ff; border:1px solid #cfdcff; border-radius:10px; padding:10px 14px; margin-bottom:12px; line-height:1.7; }
+  .summary b { color:var(--accent); }
+  .warn { background:#fff8e1; border:1px solid #f0d27a; border-left:5px solid #e5a400; border-radius:10px; padding:10px 14px; margin-bottom:12px; line-height:1.7; }
+  .two { display:grid; grid-template-columns:repeat(auto-fit,minmax(440px,1fr)); gap:12px; }
+  .cloud { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:baseline; justify-content:center; padding:10px 6px; min-height:300px; align-content:center; }
+  .w { cursor:pointer; line-height:1.25; padding:0 4px; border-radius:6px; border:2px solid transparent; user-select:none; }
+  .w:hover { background:#f0f4ff; } .w.sel { border-color:var(--warm); background:#fff4ee; }
+  .scroll { max-height:560px; overflow:auto; position:relative; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 10px; }
+  .chip { border:1px solid #f3c9b5; background:#fff4ee; border-radius:999px; padding:3px 6px 3px 12px; font-size:13px; display:inline-flex; gap:6px; align-items:center; }
+  .chip button { border:0; background:none; cursor:pointer; color:var(--warm); font-size:15px; line-height:1; padding:0 2px; }
+  .kw { padding:7px 4px; border-bottom:1px solid var(--line); line-height:1.6; }
+  .kw .tag { color:var(--sub); font-size:11px; margin-right:8px; white-space:nowrap; }
+  mark { background:#ffe58f; padding:0 1px; border-radius:2px; }
+  .empty { color:var(--sub); padding:30px; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>インバウンド消費動向ダッシュボード（山形県・B1地域調査）</h1>
+  <div class="bar">
+    <label>調査期<select id="f_quarter"></select></label>
+    <label>国籍・地域<select id="f_country"></select></label>
+    <label>性別<select id="f_sex"></select></label>
+    <label>年代<select id="f_age"></select></label>
+    <div class="tabs">
+      <a class="tab" href="/">ダッシュボード</a>
+      <a class="tab" href="/#explore">自由集計</a>
+      <a class="tab" href="/opinions">少数派の意見</a>
+      <a class="tab on" href="/textmining">テキストマイニング</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="warn" id="noJanome" hidden><b>⚠ 簡易モードで動作中です。</b>
+    Janome が見つからないため、形態素解析（名詞の抽出）ができず、区切られた語句をそのまま集計しています。
+    <code>pip install janome</code>（Renderなら requirements.txt に <code>janome</code> を追加）後に再起動すると、本来の集計になります。</div>
+
+  <div class="card"><div class="bar">
+    <label>対象の設問<select id="topic" style="min-width:200px"></select></label>
+    <label>ランキングの基準<select id="mode" style="min-width:300px">
+      <option value="count">出現数（その語を挙げた人数）</option>
+      <option value="tfidf">TF-IDF（F1・F2・F3の中でその設問に特徴的な語）</option></select></label>
+    <label>表示する語数<select id="top"><option>20</option><option selected>40</option><option>60</option></select></label>
+    <label class="chk"><input type="checkbox" id="pref" checked>山形県内と判定した回答のみ（県外の地名を含む区切りは除外）</label>
+  </div></div>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="two">
+    <div class="card"><h2>ワードクラウド</h2><div class="note">文字の大きさ＝ランキング基準の値。語をクリックすると、下の比較グラフに追加／削除し、原文を表示します。</div>
+      <div class="cloud" id="cloud"></div></div>
+    <div class="card"><h2>上位語ランキング</h2><div class="note" id="rankNote"></div>
+      <div class="scroll"><div id="rankBox" style="position:relative"><canvas id="rankCanvas"></canvas></div></div></div>
+  </div>
+
+  <div class="card">
+    <h2>語の比較（折れ線グラフ）</h2>
+    <div class="note">上のワードクラウド／ランキングで語をクリックして選ぶか、下の欄に入力して追加します（最大10語）。</div>
+    <div class="bar">
+      <label>比較する軸<select id="axis"></select></label>
+      <label>指標<select id="metric"><option value="rate">出現率（%）</option><option value="count">人数</option></select></label>
+      <label>グラフ形式<select id="ctype"><option value="auto">自動（時間・年代は折れ線）</option><option value="line">折れ線</option><option value="bar">棒</option></select></label>
+      <label>出現率を出す最小回答者数<select id="min_n"><option>5</option><option selected>10</option><option>20</option><option>30</option></select></label>
+      <label>語を追加<input type="text" id="addWord" placeholder="例：温泉"></label>
+      <button class="sm" id="addBtn" type="button">追加</button>
+      <button class="sm" id="resetBtn" type="button">上位5語に戻す</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div style="position:relative;height:380px"><canvas id="trendCanvas"></canvas></div>
+    <div class="note" id="trendNote" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card"><h2>原文（その語を含む回答）</h2><div class="note" id="kwNote">語をクリックすると、その語を含む回答の原文を表示します。</div>
+    <div class="scroll" id="kwList"></div></div>
+</main>
+
+<script>
+const META = {{ meta|tojson }};
+const $ = s => document.querySelector(s);
+const PAL = ['#2f6fed','#e8743b','#19a186','#9b59b6','#e5b422','#d9534f','#5bc0de','#7f8c8d','#8e6e53','#c2185b'];
+Chart.defaults.font.family = '"Hiragino Sans","Yu Gothic","Meiryo",sans-serif';
+const el = (t, text, c) => { const e = document.createElement(t); if (text != null) e.textContent = text; if (c) e.className = c; return e; };
+const fmt = v => v == null ? 'データ不足' : Number(v).toLocaleString('ja-JP', { maximumFractionDigits: 3 });
+let W = null, sel = [], rankChart = null, trendChart = null, timer = null;
+
+function fill(id, items, blank) {
+  const s = $(id); s.innerHTML = '';
+  if (blank) s.append(new Option(blank, ''));
+  items.forEach(i => s.append(Array.isArray(i) ? new Option(i[1], i[0]) : new Option(i, i)));
+}
+fill('#f_quarter', META.quarters, 'すべて'); fill('#f_country', META.countries, 'すべて');
+fill('#f_sex', META.sexes, 'すべて'); fill('#f_age', META.ages, 'すべて');
+fill('#topic', Object.entries(META.topics)); fill('#axis', Object.entries(META.axes));
+$('#noJanome').hidden = META.has_janome;
+
+function base(extra = {}) {
+  const p = new URLSearchParams();
+  ['quarter', 'country', 'sex', 'age'].forEach(k => { const v = $('#f_' + k).value; if (v) p.set(k, v); });
+  p.set('topic', $('#topic').value); p.set('pref', $('#pref').checked ? '1' : '0');
+  Object.entries(extra).forEach(([k, v]) => p.set(k, v));
+  return p.toString();
+}
+const val = w => $('#mode').value === 'tfidf' ? w.score : w.count;
+
+// ---------- 単語一覧（ワードクラウド・ランキング） ----------
+async function loadWords() {
+  W = await (await fetch('/api/textmining/words?' + base({ mode: $('#mode').value, top: $('#top').value }))).json();
+  const s = $('#summary'); s.innerHTML = '';
+  const b = t => el('b', t);
+  s.append('回答あり ', b(W.answers + '人'), ' ／ ', $('#pref').checked ? '山形県内と判定した区切り ' : '対象の区切り ', b(W.segments + '件'),
+           ' ／ 抽出した語の種類 ', b(W.kinds + '種類'));
+  if (!sel.length) sel = W.words.slice(0, 5).map(w => w.word);
+  renderCloud(); renderRank(); renderChips(); loadTrend();
+}
+
+function renderCloud() {
+  const box = $('#cloud'); box.innerHTML = '';
+  if (!W.words.length) { box.append(el('div', '該当する語がありません。条件を変更してください。', 'empty')); return; }
+  const max = Math.max(...W.words.map(val)) || 1;
+  [...W.words].sort((a, b) => a.word.localeCompare(b.word, 'ja')).forEach((w, i) => {
+    const sp = el('span', w.word, 'w' + (sel.includes(w.word) ? ' sel' : ''));
+    sp.style.fontSize = (13 + 33 * Math.sqrt(val(w) / max)) + 'px';
+    sp.style.color = PAL[(w.word.length + i) % 7];
+    sp.title = `${w.count}人（回答者の${w.rate}%）` + ($('#mode').value === 'tfidf' ? ` / TF-IDF ${w.score}` : '');
+    sp.onclick = () => toggle(w.word);
+    box.append(sp);
+  });
+}
+
+function renderRank() {
+  if (rankChart) rankChart.destroy();
+  $('#rankBox').style.height = Math.max(240, W.words.length * 24 + 60) + 'px';
+  const tf = $('#mode').value === 'tfidf';
+  $('#rankNote').textContent = tf ? 'TF-IDFが高い語ほど、他の設問より、この設問で特徴的です。バーをクリックで選択。' : 'その語を挙げた人数。バーをクリックで選択。';
+  rankChart = new Chart($('#rankCanvas'), {
+    type: 'bar',
+    data: { labels: W.words.map(w => w.word), datasets: [{ data: W.words.map(val), backgroundColor: W.words.map(w => sel.includes(w.word) ? '#e8743b' : '#2f6fedcc') }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      onClick: (e, els) => { if (els.length) toggle(W.words[els[0].index].word); },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => { const w = W.words[c.dataIndex];
+        return `${w.count}人（回答者の${w.rate}%）` + (tf ? ` / TF-IDF ${w.score}` : ''); } } } },
+      scales: { y: { ticks: { autoSkip: false } }, x: { beginAtZero: true, title: { display: true, text: tf ? 'TF-IDF' : '人' } } } }
+  });
+}
+
+// ---------- 語の選択・比較 ----------
+function toggle(word) {
+  const i = sel.indexOf(word);
+  if (i >= 0) sel.splice(i, 1);
+  else { if (sel.length >= 10) sel.shift(); sel.push(word); loadKwic(word); }
+  renderCloud(); renderRank(); renderChips(); loadTrend();
+}
+function renderChips() {
+  const box = $('#chips'); box.innerHTML = '';
+  if (!sel.length) box.append(el('span', '語が選ばれていません', 'note'));
+  sel.forEach(w => { const c = el('span', w, 'chip'); const x = el('button', '×'); x.type = 'button';
+    x.title = '外す'; x.onclick = () => toggle(w); c.append(x); box.append(c); });
+}
+
+async function loadTrend() {
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
+  $('#trendNote').textContent = '';
+  if (!sel.length) return;
+  const spec = await (await fetch('/api/textmining/trend?' + base({ axis: $('#axis').value, metric: $('#metric').value,
+    type: $('#ctype').value, min_n: $('#min_n').value, words: sel.join(',') }))).json();
+  const line = spec.type === 'line';
+  $('#trendNote').textContent = spec.note;
+  trendChart = new Chart($('#trendCanvas'), {
+    type: spec.type,
+    data: { labels: spec.labels, datasets: spec.datasets.map((d, i) => ({ label: d.label, data: d.data, n: d.n, m: d.m,
+      borderColor: PAL[i % 10], backgroundColor: PAL[i % 10] + (line ? '' : 'cc'), tension: .25, spanGaps: false,
+      pointRadius: 4, borderWidth: 2.5 })) },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', intersect: false },
+      plugins: { title: { display: true, text: spec.title },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y)}${spec.unit}（言及${c.dataset.m[c.dataIndex]}人／回答${c.dataset.n[c.dataIndex]}人）` } } },
+      scales: { x: { ticks: { autoSkip: false, maxRotation: 45 } }, y: { beginAtZero: true, title: { display: true, text: spec.unit } } } }
+  });
+}
+
+// ---------- 原文 ----------
+function highlight(parent, text, hits) {
+  const esc = h => h.replace(/[.*+?^$()|[\]\\{}]/g, '\\$&');
+  const re = new RegExp('(' + hits.map(esc).join('|') + ')', 'g');
+  text.split(re).forEach((p, i) => { if (i % 2) { const m = el('mark', p); parent.append(m); } else parent.append(document.createTextNode(p)); });
+}
+async function loadKwic(word) {
+  const j = await (await fetch('/api/textmining/kwic?' + base({ word }))).json();
+  $('#kwNote').textContent = `「${j.word}」を含む回答：${j.total}件` + (j.total > j.items.length ? `（先頭${j.items.length}件を表示）` : '');
+  const box = $('#kwList'); box.innerHTML = '';
+  if (!j.items.length) box.append(el('div', '該当する回答がありません。', 'empty'));
+  j.items.forEach(r => { const d = el('div', null, 'kw'); d.append(el('span', `${r.quarter || ''} ${r.country || ''}`, 'tag')); highlight(d, r.text, j.hits); box.append(d); });
+}
+
+// ---------- イベント ----------
+function addTyped() { const v = $('#addWord').value.trim(); if (!v) return; if (!sel.includes(v)) { if (sel.length >= 10) sel.shift(); sel.push(v); }
+  $('#addWord').value = ''; loadKwic(v); renderCloud(); renderRank(); renderChips(); loadTrend(); }
+$('#addBtn').onclick = addTyped;
+$('#addWord').addEventListener('keydown', e => { if (e.key === 'Enter') addTyped(); });
+$('#resetBtn').onclick = () => { sel = W.words.slice(0, 5).map(w => w.word); renderCloud(); renderRank(); renderChips(); loadTrend(); };
+$('#topic').addEventListener('change', () => { sel = []; $('#kwList').innerHTML = ''; $('#kwNote').textContent = '語をクリックすると、その語を含む回答の原文を表示します。'; loadWords(); });
+['mode', 'top', 'pref', 'f_quarter', 'f_country', 'f_sex', 'f_age'].forEach(id => $('#' + id).addEventListener('change', loadWords));
+['axis', 'metric', 'ctype', 'min_n'].forEach(id => $('#' + id).addEventListener('change', loadTrend));
+loadWords();
+</script>
+</body>
+</html>
